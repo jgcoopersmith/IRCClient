@@ -20,23 +20,25 @@ public partial class MainForm : Form
     private readonly StatusStrip _status = new();
     private readonly ToolStripStatusLabel _statusLabel = new() { Text = "Disconnected" };
 
-    // Server panel controls
-    private readonly Panel _connectPanel = new() { Dock = DockStyle.Top, Height = 80, Padding = new Padding(8) };
-    private readonly TextBox _serverBox = new() { Text = "irc.rizon.net", Width = 200 };
-    private readonly TextBox _portBox = new() { Text = "6667", Width = 60 };
-    private readonly TextBox _nickBox = new() { Text = "IRCUser" + new Random().Next(100, 999), Width = 110 };
-    private readonly TextBox _passBox = new() { PlaceholderText = "Password (optional)", Width = 150, PasswordChar = '*' };
-    private readonly Button _connectBtn = new() { Text = "Connect", Width = 80 };
-    private readonly Button _disconnectBtn = new() { Text = "Disconnect", Width = 90, Enabled = false };
+    // Connection library controls
+    private readonly Panel _libraryPanel = new() { Dock = DockStyle.Left, Width = 220, Padding = new Padding(6) };
+    private readonly ListBox _connList = new() { Dock = DockStyle.Fill, IntegralHeight = false };
+    private readonly Button _newConnBtn = new() { Text = "New" };
+    private readonly Button _editConnBtn = new() { Text = "Edit", Enabled = false };
+    private readonly Button _deleteConnBtn = new() { Text = "Delete", Enabled = false };
+    private readonly Button _connectSavedBtn = new() { Text = "Connect", Enabled = false };
+    private readonly Button _disconnectBtn = new() { Text = "Disconnect", Enabled = false };
+    private List<SavedConnection> _savedConnections = [];
+    private List<string> _pendingAutoJoinChannels = [];
 
     public MainForm()
     {
-        Text = "IRC Client (RFC 1459 / RFC 2812)";
+        Text = "jclient irc for Windows";
         Size = new Size(900, 650);
         Font = new Font("Segoe UI", 9);
         MinimumSize = new Size(600, 400);
 
-        BuildConnectPanel();
+        BuildLibraryPanel();
 
         _mainLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         _mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
@@ -48,8 +50,11 @@ public partial class MainForm : Form
 
         _status.Items.Add(_statusLabel);
 
+        // Add order matters for docking: controls are docked in reverse of Controls.Add
+        // order, so _mainLayout (Fill) is added first to claim whatever space is left
+        // after _libraryPanel (Left) and the status bar have claimed theirs.
         Controls.Add(_mainLayout);
-        Controls.Add(_connectPanel);
+        Controls.Add(_libraryPanel);
         Controls.Add(_status);
 
         // Server log tab
@@ -158,31 +163,113 @@ public partial class MainForm : Form
         }
     }
 
-    private void BuildConnectPanel()
+    private void BuildLibraryPanel()
     {
-        var layout = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = false };
-
-        void AddLabeled(string label, Control ctrl)
+        var header = new Label
         {
-            layout.Controls.Add(new Label { Text = label, TextAlign = ContentAlignment.MiddleLeft, AutoSize = true, Padding = new Padding(4, 10, 0, 0) });
-            ctrl.Margin = new Padding(2, 8, 4, 0);
-            layout.Controls.Add(ctrl);
+            Text = "Connections",
+            Dock = DockStyle.Top,
+            Height = 22,
+            Font = new Font(Font, FontStyle.Bold)
+        };
+
+        var btnLayout = new TableLayoutPanel { Dock = DockStyle.Bottom, Height = 94, ColumnCount = 2, RowCount = 3 };
+        btnLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        btnLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        foreach (var b in new[] { _newConnBtn, _editConnBtn, _deleteConnBtn, _connectSavedBtn, _disconnectBtn })
+        {
+            b.Dock = DockStyle.Fill;
+            b.Margin = new Padding(2);
         }
+        btnLayout.Controls.Add(_newConnBtn, 0, 0);
+        btnLayout.Controls.Add(_editConnBtn, 1, 0);
+        btnLayout.Controls.Add(_deleteConnBtn, 0, 1);
+        btnLayout.Controls.Add(_connectSavedBtn, 1, 1);
+        btnLayout.Controls.Add(_disconnectBtn, 0, 2);
+        btnLayout.SetColumnSpan(_disconnectBtn, 2);
 
-        AddLabeled("Server:", _serverBox);
-        AddLabeled("Port:", _portBox);
-        AddLabeled("Nick:", _nickBox);
-        AddLabeled("Pass:", _passBox);
+        _libraryPanel.Controls.Add(_connList);
+        _libraryPanel.Controls.Add(btnLayout);
+        _libraryPanel.Controls.Add(header);
 
-        _connectBtn.Margin = new Padding(4, 8, 2, 0);
-        _disconnectBtn.Margin = new Padding(2, 8, 2, 0);
-        layout.Controls.Add(_connectBtn);
-        layout.Controls.Add(_disconnectBtn);
+        _savedConnections = ConnectionStore.Load();
+        RefreshConnList();
 
-        _connectPanel.Controls.Add(layout);
+        _connList.SelectedIndexChanged += (s, e) =>
+        {
+            bool has = _connList.SelectedIndex >= 0;
+            _editConnBtn.Enabled = has;
+            _deleteConnBtn.Enabled = has;
+            _connectSavedBtn.Enabled = has;
+        };
 
-        _connectBtn.Click += OnConnect;
+        _connList.DoubleClick += (s, e) => ConnectToSelected();
+        _connectSavedBtn.Click += (s, e) => ConnectToSelected();
         _disconnectBtn.Click += OnDisconnect;
+
+        _newConnBtn.Click += (s, e) =>
+        {
+            using var dlg = new ConnectionEditForm(null);
+            if (dlg.ShowDialog(this) == DialogResult.OK)
+            {
+                _savedConnections.Add(dlg.Result);
+                ConnectionStore.Save(_savedConnections);
+                RefreshConnList();
+                _connList.SelectedIndex = _savedConnections.Count - 1;
+            }
+        };
+
+        _editConnBtn.Click += (s, e) => EditSelected();
+
+        _deleteConnBtn.Click += (s, e) =>
+        {
+            int idx = _connList.SelectedIndex;
+            if (idx < 0) return;
+            var name = _savedConnections[idx].Name;
+            var confirm = MessageBox.Show(this, $"Delete connection \"{name}\"?", "Confirm Delete",
+                MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+            if (confirm != DialogResult.Yes) return;
+
+            _savedConnections.RemoveAt(idx);
+            ConnectionStore.Save(_savedConnections);
+            RefreshConnList();
+        };
+    }
+
+    private void EditSelected()
+    {
+        int idx = _connList.SelectedIndex;
+        if (idx < 0) return;
+        using var dlg = new ConnectionEditForm(_savedConnections[idx]);
+        if (dlg.ShowDialog(this) == DialogResult.OK)
+        {
+            _savedConnections[idx] = dlg.Result;
+            ConnectionStore.Save(_savedConnections);
+            RefreshConnList();
+            _connList.SelectedIndex = idx;
+        }
+    }
+
+    private void RefreshConnList()
+    {
+        var selected = _connList.SelectedIndex;
+        _connList.Items.Clear();
+        foreach (var c in _savedConnections)
+            _connList.Items.Add(c.Name);
+        if (selected >= 0 && selected < _connList.Items.Count)
+            _connList.SelectedIndex = selected;
+    }
+
+    private async void ConnectToSelected()
+    {
+        int idx = _connList.SelectedIndex;
+        if (idx < 0) return;
+        var c = _savedConnections[idx];
+
+        _pendingAutoJoinChannels = [.. c.Channels
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)];
+
+        await ConnectAsync(c);
     }
 
     private RichTextBox AddChannelTab(string name)
@@ -220,28 +307,24 @@ public partial class MainForm : Form
         log.ScrollToCaret();
     }
 
-    private async void OnConnect(object? s, EventArgs e)
+    private async Task ConnectAsync(SavedConnection c)
     {
-        if (!int.TryParse(_portBox.Text, out int port)) port = 6667;
-
         _irc?.Dispose();
         _irc = new IrcConnection();
         _irc.MessageReceived += OnMessage;
         _irc.Disconnected += () =>
         {
             _statusLabel.Text = "Disconnected";
-            _connectBtn.Enabled = true;
             _disconnectBtn.Enabled = false;
             AppendLine("(server)", "*** Disconnected", Color.Orange);
         };
 
         try
         {
-            AppendLine("(server)", $"*** Connecting to {_serverBox.Text}:{port}...", Color.Cyan);
-            await _irc.ConnectAsync(_serverBox.Text, port, _nickBox.Text,
-                string.IsNullOrWhiteSpace(_passBox.Text) ? null : _passBox.Text);
-            _statusLabel.Text = $"Connected to {_serverBox.Text} as {_nickBox.Text}";
-            _connectBtn.Enabled = false;
+            AppendLine("(server)", $"*** Connecting to {c.Server}:{c.Port}...", Color.Cyan);
+            await _irc.ConnectAsync(c.Server, c.Port, c.Nick,
+                string.IsNullOrWhiteSpace(c.Password) ? null : c.Password);
+            _statusLabel.Text = $"Connected to {c.Server} as {c.Nick}";
             _disconnectBtn.Enabled = true;
         }
         catch (Exception ex)
@@ -255,7 +338,6 @@ public partial class MainForm : Form
         if (_irc != null) await _irc.QuitAsync("Leaving");
         _irc?.Dispose();
         _irc = null;
-        _connectBtn.Enabled = true;
         _disconnectBtn.Enabled = false;
     }
 
@@ -265,6 +347,12 @@ public partial class MainForm : Form
         {
             case "001": // RPL_WELCOME
                 AppendLine("(server)", $"*** {msg.Params.LastOrDefault()}", Color.LightGreen);
+                if (_pendingAutoJoinChannels.Count > 0)
+                {
+                    foreach (var channel in _pendingAutoJoinChannels)
+                        _ = _irc!.JoinAsync(channel.StartsWith('#') || channel.StartsWith('&') ? channel : $"#{channel}");
+                    _pendingAutoJoinChannels.Clear();
+                }
                 break;
 
             case "372": // RPL_MOTD
