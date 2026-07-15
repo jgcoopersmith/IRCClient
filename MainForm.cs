@@ -38,6 +38,7 @@ public partial class MainForm : Form
         Size = new Size(900, 650);
         Font = new Font("Segoe UI", 9);
         MinimumSize = new Size(600, 400);
+        Icon = AppIcon.Load();
 
         BuildLibraryPanel();
 

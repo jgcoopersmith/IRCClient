@@ -25,6 +25,7 @@ public class ConnectionEditForm : Form
         ShowInTaskbar = false;
         StartPosition = FormStartPosition.CenterParent;
         ClientSize = new Size(320, 275);
+        Icon = AppIcon.Load();
         Font = new Font("Segoe UI", 9);
 
         if (existing != null)
