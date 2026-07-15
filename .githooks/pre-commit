@@ -1,0 +1,18 @@
+#!/bin/sh
+# Bumps the last component of <Version> in IRCClient.csproj on every commit,
+# so each commit ships a unique, increasing version (shown in Options > About).
+# Enabled via: git config core.hooksPath .githooks
+cd "$(git rev-parse --show-toplevel)" || exit 0
+
+ver=$(sed -n 's/.*<Version>\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)<\/Version>.*/\1/p' IRCClient.csproj)
+[ -z "$ver" ] && exit 0
+
+major=${ver%%.*}
+rest=${ver#*.}
+minor=${rest%%.*}
+patch=${rest#*.}
+new="$major.$minor.$((patch + 1))"
+
+sed -i "s|<Version>$ver</Version>|<Version>$new</Version>|" IRCClient.csproj
+git add IRCClient.csproj
+echo "pre-commit: version $ver -> $new"
