@@ -33,7 +33,7 @@ public partial class MainForm : Form
 
     public MainForm()
     {
-        AutoScaleMode = AutoScaleMode.Dpi;
+        AutoScaleMode = AutoScaleMode.Font;
         Text = "jclient irc for Windows";
         Size = new Size(900, 650);
         Font = new Font("Segoe UI", 9);

@@ -17,7 +17,7 @@ public class ConnectionEditForm : Form
 
     public ConnectionEditForm(SavedConnection? existing)
     {
-        AutoScaleMode = AutoScaleMode.Dpi;
+        AutoScaleMode = AutoScaleMode.Font;
         Text = existing == null ? "New Connection" : "Edit Connection";
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
