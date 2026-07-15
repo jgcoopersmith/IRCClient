@@ -36,6 +36,7 @@ public partial class MainForm : Form
     private readonly Button _disconnectBtn = new() { Text = "Disconnect", Enabled = false };
     private List<SavedConnection> _savedConnections = [];
     private List<string> _pendingAutoJoinChannels = [];
+    private readonly AppSettings _settings = SettingsStore.Load();
 
     public MainForm()
     {
@@ -76,7 +77,31 @@ public partial class MainForm : Form
         var fileMenu = new ToolStripMenuItem("File");
         var disconnectItem = new ToolStripMenuItem("Disconnect");
         disconnectItem.Click += OnDisconnect;
-        var optionsItem = new ToolStripMenuItem("Options"); // placeholder, not populated yet
+        var optionsItem = new ToolStripMenuItem("Options");
+        var connectOptions = new ToolStripMenuItem("Connect");
+        var connectOnStartupItem = new ToolStripMenuItem("Connect on startup")
+        {
+            CheckOnClick = true,
+            Checked = _settings.ConnectOnStartup
+        };
+        connectOnStartupItem.CheckedChanged += (s, e) =>
+        {
+            _settings.ConnectOnStartup = connectOnStartupItem.Checked;
+            SettingsStore.Save(_settings);
+        };
+        var reconnectOnDisconnectItem = new ToolStripMenuItem("Reconnect on disconnect")
+        {
+            CheckOnClick = true,
+            Checked = _settings.ReconnectOnDisconnect
+        };
+        reconnectOnDisconnectItem.CheckedChanged += (s, e) =>
+        {
+            _settings.ReconnectOnDisconnect = reconnectOnDisconnectItem.Checked;
+            SettingsStore.Save(_settings);
+        };
+        connectOptions.DropDownItems.Add(connectOnStartupItem);
+        connectOptions.DropDownItems.Add(reconnectOnDisconnectItem);
+        optionsItem.DropDownItems.Add(connectOptions);
         var exitItem = new ToolStripMenuItem("Exit");
         exitItem.Click += (s, e) => Close();
         fileMenu.DropDownItems.Add(disconnectItem);
@@ -342,6 +367,9 @@ public partial class MainForm : Form
         if (idx < 0) return;
         var c = _savedConnections[idx];
 
+        _settings.LastConnectionName = c.Name;
+        SettingsStore.Save(_settings);
+
         _pendingAutoJoinChannels = [.. c.Channels
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)];
 
@@ -408,10 +436,14 @@ public partial class MainForm : Form
             // Dispose() doesn't unsubscribe event handlers, and this callback is
             // delivered via a posted continuation, so a superseded connection's
             // Disconnected can still fire after _irc has moved on to a newer one.
+            // This guard also means user-initiated disconnects (OnDisconnect nulls
+            // _irc first) never reach the auto-reconnect below — only real drops do.
             if (_irc != conn) return;
             _statusLabel.Text = "Disconnected";
             _disconnectBtn.Enabled = false;
             AppendLine("(server)", "*** Disconnected", Color.Orange);
+            if (_settings.ReconnectOnDisconnect)
+                _ = ReconnectAsync(conn, c);
         };
 
         try
@@ -426,6 +458,22 @@ public partial class MainForm : Form
         {
             AppendLine("(server)", $"*** Error: {ex.Message}", Color.Red);
         }
+    }
+
+    private async Task ReconnectAsync(IrcConnection failedConn, SavedConnection c)
+    {
+        // Rejoin everything that was open, not just the saved auto-join list —
+        // the user may have joined more channels during the session.
+        _pendingAutoJoinChannels = [.. _channels.Keys.Where(k => k.StartsWith('#') || k.StartsWith('&'))];
+
+        AppendLine("(server)", "*** Reconnecting in 5 seconds...", Color.Cyan);
+        await Task.Delay(5000);
+
+        // Skip if the user connected somewhere else or clicked Disconnect while
+        // we were waiting — _irc no longer points at the connection that died.
+        if (_irc != failedConn) return;
+
+        await ConnectAsync(c);
     }
 
     private async void OnDisconnect(object? s, EventArgs e)
@@ -653,6 +701,17 @@ public partial class MainForm : Form
                 await _irc.SendRawAsync(cmd);
                 break;
         }
+    }
+
+    protected override void OnShown(EventArgs e)
+    {
+        base.OnShown(e);
+        if (!_settings.ConnectOnStartup || _savedConnections.Count == 0) return;
+
+        var c = _savedConnections.FirstOrDefault(x => x.Name == _settings.LastConnectionName)
+                ?? _savedConnections[0];
+        _connList.SelectedIndex = _savedConnections.IndexOf(c);
+        ConnectToSelected();
     }
 
     protected override void OnFormClosed(FormClosedEventArgs e)
