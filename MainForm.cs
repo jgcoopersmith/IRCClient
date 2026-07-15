@@ -459,9 +459,9 @@ public partial class MainForm : Form
                 var nick = msg.PrefixNick ?? "";
                 if (!_channels.ContainsKey(channel))
                     AddChannelTab(channel);
+                // Deliberately no _tabs.SelectedTab change here: tabs only switch
+                // when the user clicks one. The unread highlight marks the new tab.
                 AppendLine(channel, $"*** {nick} joined {channel}", Color.LightBlue);
-                _tabs.SelectedTab = _channels[channel].tab;
-                _currentTarget = channel;
                 break;
             }
 
