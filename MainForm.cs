@@ -24,6 +24,7 @@ public partial class MainForm : Form
     private readonly Button _sendBtn = new() { Text = "Send", Dock = DockStyle.Right };
     private readonly StatusStrip _status = new();
     private readonly ToolStripStatusLabel _statusLabel = new() { Text = "Disconnected" };
+    private readonly MenuStrip _menu = new();
 
     // Connection library controls
     private readonly Panel _libraryPanel = new() { Dock = DockStyle.Left };
@@ -71,12 +72,28 @@ public partial class MainForm : Form
 
         _status.Items.Add(_statusLabel);
 
+        // File menu
+        var fileMenu = new ToolStripMenuItem("File");
+        var disconnectItem = new ToolStripMenuItem("Disconnect");
+        disconnectItem.Click += OnDisconnect;
+        var optionsItem = new ToolStripMenuItem("Options"); // placeholder, not populated yet
+        var exitItem = new ToolStripMenuItem("Exit");
+        exitItem.Click += (s, e) => Close();
+        fileMenu.DropDownItems.Add(disconnectItem);
+        fileMenu.DropDownItems.Add(optionsItem);
+        fileMenu.DropDownItems.Add(new ToolStripSeparator());
+        fileMenu.DropDownItems.Add(exitItem);
+        _menu.Items.Add(fileMenu);
+        MainMenuStrip = _menu;
+
         // Add order matters for docking: controls are docked in reverse of Controls.Add
         // order, so _mainLayout (Fill) is added first to claim whatever space is left
-        // after _libraryPanel (Left) and the status bar have claimed theirs.
+        // after the menu (Top), _libraryPanel (Left), and the status bar have claimed
+        // theirs. The menu is added last so it docks first and spans the full width.
         Controls.Add(_mainLayout);
         Controls.Add(_libraryPanel);
         Controls.Add(_status);
+        Controls.Add(_menu);
 
         // Server log tab
         AddChannelTab("(server)");
@@ -413,10 +430,17 @@ public partial class MainForm : Form
 
     private async void OnDisconnect(object? s, EventArgs e)
     {
-        if (_irc != null) await _irc.QuitAsync("Leaving");
+        if (_irc == null) return;
+        try { await _irc.QuitAsync("Leaving"); }
+        catch { } // connection may already be dead; QUIT is best-effort
         _irc?.Dispose();
         _irc = null;
         _disconnectBtn.Enabled = false;
+        // Update the UI here rather than relying on the Disconnected event:
+        // that handler ignores events from connections that are no longer
+        // current, and _irc is already null by the time its callback runs.
+        _statusLabel.Text = "Disconnected";
+        AppendLine("(server)", "*** Disconnected", Color.Orange);
     }
 
     private void OnMessage(IrcMessage msg)
