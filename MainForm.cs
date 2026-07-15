@@ -12,6 +12,10 @@ public partial class MainForm : Form
     private readonly Dictionary<string, (TabPage tab, RichTextBox log)> _channels = new(StringComparer.OrdinalIgnoreCase);
     private string _currentTarget = "";
 
+    // Tabs that received messages while not the active tab; drawn highlighted
+    // until the user opens them.
+    private readonly HashSet<string> _unreadTabs = new(StringComparer.OrdinalIgnoreCase);
+
     // Controls
     private readonly TableLayoutPanel _mainLayout = new() { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1 };
     private readonly TabControl _tabs = new() { Dock = DockStyle.Fill };
@@ -87,7 +91,24 @@ public partial class MainForm : Form
         _tabs.Selected += (s, e) =>
         {
             if (_tabs.SelectedTab != null)
+            {
                 _currentTarget = _tabs.SelectedTab.Text;
+                if (_unreadTabs.Remove(_currentTarget))
+                    _tabs.Invalidate();
+            }
+        };
+
+        // Owner-draw the tab headers so tabs with unread activity can be
+        // highlighted; the default renderer has no per-tab text color.
+        _tabs.DrawMode = TabDrawMode.OwnerDrawFixed;
+        _tabs.DrawItem += (s, e) =>
+        {
+            if (e.Index < 0 || e.Index >= _tabs.TabCount) return;
+            var tab = _tabs.TabPages[e.Index];
+            e.DrawBackground();
+            var color = _unreadTabs.Contains(tab.Text) ? Color.DarkOrange : _tabs.ForeColor;
+            TextRenderer.DrawText(e.Graphics, tab.Text, _tabs.Font, e.Bounds, color,
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
         };
 
         // Middle-click closes a tab
@@ -170,6 +191,7 @@ public partial class MainForm : Form
             await _irc.PartAsync(name);
 
         _channels.Remove(name);
+        _unreadTabs.Remove(name);
         _tabs.TabPages.Remove(ch.tab);
 
         if (_currentTarget.Equals(name, StringComparison.OrdinalIgnoreCase))
@@ -352,6 +374,10 @@ public partial class MainForm : Form
         log.SelectionColor = color ?? Color.LightGray;
         log.AppendText(text + "\n");
         log.ScrollToCaret();
+
+        // Highlight the tab if this message landed somewhere the user isn't looking
+        if (!target.Equals(_currentTarget, StringComparison.OrdinalIgnoreCase) && _unreadTabs.Add(target))
+            _tabs.Invalidate();
     }
 
     private async Task ConnectAsync(SavedConnection c)
@@ -450,6 +476,7 @@ public partial class MainForm : Form
                     && _channels.TryGetValue(channel, out var ch))
                 {
                     _channels.Remove(channel);
+                    _unreadTabs.Remove(channel);
                     _tabs.TabPages.Remove(ch.tab);
                     if (_currentTarget.Equals(channel, StringComparison.OrdinalIgnoreCase))
                     {
