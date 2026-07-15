@@ -17,16 +17,18 @@ public class ConnectionEditForm : Form
 
     public ConnectionEditForm(SavedConnection? existing)
     {
-        AutoScaleMode = AutoScaleMode.Font;
+        // See MainForm's constructor for why manual LogicalToDeviceUnits
+        // conversion is used instead of the legacy AutoScale system.
+        AutoScaleMode = AutoScaleMode.None;
         Text = existing == null ? "New Connection" : "Edit Connection";
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
         ShowInTaskbar = false;
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(320, 275);
-        Icon = AppIcon.Load();
         Font = new Font("Segoe UI", 9);
+        ClientSize = LogicalToDeviceUnits(new Size(320, 275));
+        Icon = AppIcon.Load();
 
         if (existing != null)
         {
@@ -48,18 +50,18 @@ public class ConnectionEditForm : Form
             Dock = DockStyle.Top,
             ColumnCount = 2,
             RowCount = 6,
-            Height = 210,
-            Padding = new Padding(10)
+            Height = LogicalToDeviceUnits(210),
+            Padding = new Padding(LogicalToDeviceUnits(10))
         };
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 80));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, LogicalToDeviceUnits(80)));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         for (int i = 0; i < 6; i++)
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, LogicalToDeviceUnits(32)));
 
         void AddRow(int row, string label, Control ctrl)
         {
             layout.Controls.Add(new Label { Text = label, AutoSize = false, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft }, 0, row);
-            ctrl.Margin = new Padding(2, 5, 2, 2);
+            ctrl.Margin = new Padding(LogicalToDeviceUnits(2), LogicalToDeviceUnits(5), LogicalToDeviceUnits(2), LogicalToDeviceUnits(2));
             layout.Controls.Add(ctrl, 1, row);
         }
 
@@ -70,8 +72,8 @@ public class ConnectionEditForm : Form
         AddRow(4, "Password:", _passBox);
         AddRow(5, "Channels:", _channelsBox);
 
-        var okBtn = new Button { Text = "OK", DialogResult = DialogResult.OK, Width = 80 };
-        var cancelBtn = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, Width = 80 };
+        var okBtn = new Button { Text = "OK", DialogResult = DialogResult.OK, Width = LogicalToDeviceUnits(80) };
+        var cancelBtn = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, Width = LogicalToDeviceUnits(80) };
         okBtn.Click += (s, e) =>
         {
             Result = new SavedConnection
@@ -89,10 +91,10 @@ public class ConnectionEditForm : Form
         {
             Dock = DockStyle.Bottom,
             FlowDirection = FlowDirection.RightToLeft,
-            Height = 40,
-            Padding = new Padding(10)
+            Height = LogicalToDeviceUnits(40),
+            Padding = new Padding(LogicalToDeviceUnits(10))
         };
-        cancelBtn.Margin = new Padding(4, 0, 0, 0);
+        cancelBtn.Margin = new Padding(LogicalToDeviceUnits(4), 0, 0, 0);
         btnPanel.Controls.Add(cancelBtn);
         btnPanel.Controls.Add(okBtn);
 

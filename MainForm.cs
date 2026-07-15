@@ -14,14 +14,14 @@ public partial class MainForm : Form
     // Controls
     private readonly TableLayoutPanel _mainLayout = new() { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1 };
     private readonly TabControl _tabs = new() { Dock = DockStyle.Fill };
-    private readonly Panel _inputPanel = new() { Dock = DockStyle.Fill, Height = 36 };
+    private readonly Panel _inputPanel = new() { Dock = DockStyle.Fill };
     private readonly TextBox _inputBox = new() { Dock = DockStyle.Fill, Font = new Font("Consolas", 10) };
-    private readonly Button _sendBtn = new() { Text = "Send", Width = 70, Dock = DockStyle.Right };
+    private readonly Button _sendBtn = new() { Text = "Send", Dock = DockStyle.Right };
     private readonly StatusStrip _status = new();
     private readonly ToolStripStatusLabel _statusLabel = new() { Text = "Disconnected" };
 
     // Connection library controls
-    private readonly Panel _libraryPanel = new() { Dock = DockStyle.Left, Width = 220, Padding = new Padding(6) };
+    private readonly Panel _libraryPanel = new() { Dock = DockStyle.Left };
     private readonly ListBox _connList = new() { Dock = DockStyle.Fill, IntegralHeight = false };
     private readonly Button _newConnBtn = new() { Text = "New" };
     private readonly Button _editConnBtn = new() { Text = "Edit", Enabled = false };
@@ -33,17 +33,31 @@ public partial class MainForm : Form
 
     public MainForm()
     {
-        AutoScaleMode = AutoScaleMode.Font;
+        // Legacy AutoScaleMode/AutoScaleDimensions self-calibrate against
+        // whatever font metrics are current at the moment they're set, which
+        // for a hand-built (non-Designer) form always equals the live DPI's
+        // own metrics — giving a permanent 1.0 scale factor and leaving every
+        // hardcoded pixel size unscaled at high DPI, even though GDI still
+        // renders text natively larger. Verified via ContainerControl probing
+        // rather than assumed. Instead, every hardcoded size below is passed
+        // through LogicalToDeviceUnits, which deterministically multiplies by
+        // DeviceDpi/96 — the documented API for manual DPI-aware layout.
+        AutoScaleMode = AutoScaleMode.None;
         Text = "jclient irc for Windows";
-        Size = new Size(900, 650);
         Font = new Font("Segoe UI", 9);
-        MinimumSize = new Size(600, 400);
+        Size = LogicalToDeviceUnits(new Size(900, 650));
+        MinimumSize = LogicalToDeviceUnits(new Size(600, 400));
         Icon = AppIcon.Load();
+
+        _inputPanel.Height = LogicalToDeviceUnits(36);
+        _sendBtn.Width = LogicalToDeviceUnits(70);
+        _libraryPanel.Width = LogicalToDeviceUnits(220);
+        _libraryPanel.Padding = new Padding(LogicalToDeviceUnits(6));
 
         BuildLibraryPanel();
 
         _mainLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        _mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+        _mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, LogicalToDeviceUnits(36)));
         _mainLayout.Controls.Add(_tabs, 0, 0);
         _mainLayout.Controls.Add(_inputPanel, 0, 1);
 
@@ -171,17 +185,17 @@ public partial class MainForm : Form
         {
             Text = "Connections",
             Dock = DockStyle.Top,
-            Height = 22,
+            Height = LogicalToDeviceUnits(22),
             Font = new Font(Font, FontStyle.Bold)
         };
 
-        var btnLayout = new TableLayoutPanel { Dock = DockStyle.Bottom, Height = 94, ColumnCount = 2, RowCount = 3 };
+        var btnLayout = new TableLayoutPanel { Dock = DockStyle.Bottom, Height = LogicalToDeviceUnits(94), ColumnCount = 2, RowCount = 3 };
         btnLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
         btnLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
         foreach (var b in new[] { _newConnBtn, _editConnBtn, _deleteConnBtn, _connectSavedBtn, _disconnectBtn })
         {
             b.Dock = DockStyle.Fill;
-            b.Margin = new Padding(2);
+            b.Margin = new Padding(LogicalToDeviceUnits(2));
         }
         btnLayout.Controls.Add(_newConnBtn, 0, 0);
         btnLayout.Controls.Add(_editConnBtn, 1, 0);
