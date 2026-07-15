@@ -73,8 +73,12 @@ public class ConnectionEditForm : Form
         AddRow(4, "Password:", _passBox);
         AddRow(5, "Channels:", _channelsBox);
 
-        var okBtn = new Button { Text = "OK", DialogResult = DialogResult.OK, Width = LogicalToDeviceUnits(80) };
-        var cancelBtn = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, Width = LogicalToDeviceUnits(80) };
+        // Height must be set explicitly too, not just Width: with AutoScaleMode.None,
+        // a Button that never gets an explicit Size falls back to WinForms' hardcoded
+        // DefaultSize (75x23 logical px) unscaled, leaving it small at high DPI even
+        // though everything sized via LogicalToDeviceUnits around it scales correctly.
+        var okBtn = new Button { Text = "OK", DialogResult = DialogResult.OK, Size = LogicalToDeviceUnits(new Size(80, 28)) };
+        var cancelBtn = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, Size = LogicalToDeviceUnits(new Size(80, 28)) };
         okBtn.Click += (s, e) =>
         {
             Result = new SavedConnection

@@ -193,6 +193,13 @@ public partial class MainForm : Form
         var btnLayout = new TableLayoutPanel { Dock = DockStyle.Bottom, Height = LogicalToDeviceUnits(94), ColumnCount = 2, RowCount = 3 };
         btnLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
         btnLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        // RowCount alone doesn't give every row an equal share of the panel's
+        // height — without explicit RowStyles, unstyled rows size to content and
+        // whichever row is last soaks up the rest, making Disconnect huge relative
+        // to New/Edit/Delete/Connect (most visible at high DPI where the panel's
+        // total height is much larger than the buttons' natural content size).
+        for (int i = 0; i < 3; i++)
+            btnLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f / 3));
         foreach (var b in new[] { _newConnBtn, _editConnBtn, _deleteConnBtn, _connectSavedBtn, _disconnectBtn })
         {
             b.Dock = DockStyle.Fill;
